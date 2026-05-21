@@ -2,17 +2,14 @@
 
 namespace App\Commands;
 
+use App\Commands\Concerns\Shell;
 use App\Enums\TransactionStatus;
-use App\Models\Account;
 use App\Models\Transaction;
 use App\Services\CurrencyService;
 use App\Services\TransactionService;
-use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Support\Facades\Artisan;
-use LaravelZero\Framework\Commands\Command;
 use function Termwind\{render, renderUsing};
 
-class Shell extends Command
+class Payment extends Shell
 {
     protected CurrencyService $currencyService;
 
@@ -29,7 +26,7 @@ class Shell extends Command
         $this->currencyService    = new CurrencyService();
         $this->transactionService = new TransactionService($this->currencyService);
     }
-    
+
     public function handle(): int
     {
         $this->initiate();
@@ -38,78 +35,21 @@ class Shell extends Command
         return 0;
     }
 
-    protected function initiate(): void
+    protected function dispatchCommand(string $command, array $tokens): string
     {
-        $dbDir = dirname(config('database.connections.sqlite.database'));
-        if (!is_dir($dbDir)) {
-            mkdir($dbDir, 0755, true);
-        }
-
-        Artisan::call('migrate', ['--force' => true]);
-
-        Account::ensureExists();
-    }
-
-    protected function runInteractive(): void
-    {
-        $this->info('Shell - Type "help" for commands, "exit" to quit.');
-        $this->newLine();
-
-        while (true) {
-            $line = $this->ask('shell');
-
-            if (trim($line) === '') continue;
-
-            $result = $this->processCommand($line);
-            $this->line($result);
-
-            if (str_starts_with($result, 'Goodbye')) break;
-        }
-    }
-
-    protected function processCommand(string $line): string
-    {
-        $line = trim($line);
-
-        if ($line === '') {
-            return '';
-        }
-
-        // Handle inline comments - only after 3rd token
-        $tokens = preg_split('/\s+/', $line);
-        $command = strtoupper($tokens[0] ?? '');
-
-        // Skip empty command
-        if ($command === '') {
-            return '';
-        }
-
-        // Strip inline comment: # must appear as a standalone token at position >= 4
-        // (after command + 3 argument tokens), per spec
-        foreach ($tokens as $i => $tok) {
-            if ($i >= 4 && str_starts_with($tok, '#')) {
-                $tokens = array_slice($tokens, 0, $i);
-                $line = implode(' ', $tokens);
-                $command = strtoupper($tokens[0] ?? '');
-                break;
-            }
-        }
-
         return match ($command) {
-            'HELP' => $this->help(),
-            'CREATE' => $this->cmdCreate($tokens),
-            'AUTHORIZE', 'AUTH' => $this->cmdAuthorize($tokens),
-            'CAPTURE' => $this->cmdCapture($tokens),
-            'VOID' => $this->cmdVoid($tokens),
-            'REFUND' => $this->cmdRefund($tokens),
-            'SETTLE' => $this->cmdSettle($tokens),
-            'SETTLEMENT' => $this->cmdSettlement($tokens),
-            'STATUS' => $this->cmdStatus($tokens),
-            'LIST' => $this->cmdList($tokens),
-            'AUDIT' => 'AUDIT RECEIVED',
-            'CLEAR' => $this->cmdClear(),
-            'EXIT', 'QUIT' => 'Goodbye!',
-            default => "ERROR: Unknown command '$command'",
+            'HELP'                  => $this->help(),
+            'CREATE'                => $this->cmdCreate($tokens),
+            'AUTHORIZE', 'AUTH'     => $this->cmdAuthorize($tokens),
+            'CAPTURE'               => $this->cmdCapture($tokens),
+            'VOID'                  => $this->cmdVoid($tokens),
+            'REFUND'                => $this->cmdRefund($tokens),
+            'SETTLE'                => $this->cmdSettle($tokens),
+            'SETTLEMENT'            => $this->cmdSettlement($tokens),
+            'STATUS'                => $this->cmdStatus($tokens),
+            'LIST'                  => $this->cmdList($tokens),
+            'AUDIT'                 => 'AUDIT RECEIVED',
+            default                 => "ERROR: Unknown command '$command'",
         };
     }
 
@@ -262,9 +202,8 @@ HTML
             return 'ERROR: SETTLEMENT requires <batch_id>';
         }
 
-        $batchId = $tokens[1];
-        $settled = Transaction::where('status', TransactionStatus::Settled->value)->get();
-
+        $batchId  = $tokens[1];
+        $settled  = Transaction::where('status', TransactionStatus::Settled->value)->get();
         $count    = $settled->count();
         $totalMyr = $settled->sum(fn ($t) => $this->currencyService->convertMinorUnits($t->amount, $t->currency, 'MYR'));
 
@@ -277,7 +216,7 @@ HTML
             return 'ERROR: STATUS requires <payment_id>';
         }
 
-        $id = $tokens[1];
+        $id          = $tokens[1];
         $transaction = Transaction::findByPaymentId($id);
 
         if (!$transaction) {
@@ -301,18 +240,5 @@ HTML
         }
 
         return implode("\n", $output);
-    }
-
-    protected function cmdClear(): string
-    {
-        // ANSI escape code to clear screen
-        $this->output->write("\033[2J\033[H");
-
-        return '';
-    }
-
-    public function schedule(Schedule $schedule): void
-    {
-        // not scheduled
     }
 }
