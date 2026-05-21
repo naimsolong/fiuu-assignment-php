@@ -9,14 +9,14 @@ use function Termwind\{render, renderUsing};
 
 class Account extends Shell
 {
-    protected $signature = 'account';
+    protected $signature = 'account {args* : Command and arguments (omit to start interactive shell)}';
 
-    protected $description = 'Interactive account shell - accepts INFO, RESET, EXIT';
+    protected $description = 'Account shell — run interactively or pass a command directly (e.g. account INFO)';
 
     public function handle(): int
     {
         $this->initiate();
-        $this->runInteractive();
+        $this->runOnceOrInteractive();
 
         return 0;
     }

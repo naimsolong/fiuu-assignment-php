@@ -15,9 +15,9 @@ class Payment extends Shell
 
     protected TransactionService $transactionService;
 
-    protected $signature = 'payment';
+    protected $signature = 'payment {args* : Command and arguments (omit to start interactive shell)}';
 
-    protected $description = 'Interactive transaction shell - accepts CREATE, AUTHORIZE, CAPTURE, VOID, REFUND, SETTLE, STATUS, LIST, EXIT';
+    protected $description = 'Transaction shell — run interactively or pass a command directly (e.g. payment CREATE P101 100 MYR 1)';
 
     public function __construct()
     {
@@ -30,7 +30,7 @@ class Payment extends Shell
     public function handle(): int
     {
         $this->initiate();
-        $this->runInteractive();
+        $this->runOnceOrInteractive();
 
         return 0;
     }
@@ -203,6 +203,11 @@ HTML
         }
 
         $batchId  = $tokens[1];
+
+        Transaction::where('status', TransactionStatus::Settled->value)
+            ->whereNull('batch_id')
+            ->update(['batch_id' => $batchId]);
+
         $settled  = Transaction::where('status', TransactionStatus::Settled->value)->get();
         $count    = $settled->count();
         $totalMyr = $settled->sum(fn ($t) => $this->currencyService->convertMinorUnits($t->amount, $t->currency, 'MYR'));

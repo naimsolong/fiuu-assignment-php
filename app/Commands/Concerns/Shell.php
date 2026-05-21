@@ -26,6 +26,19 @@ abstract class Shell extends Command
         Account::ensureExists();
     }
 
+    protected function runOnceOrInteractive(): void
+    {
+        $args = $this->argument('args');
+        if (!empty($args)) {
+            $result = $this->processCommand(implode(' ', $args));
+            if ($result !== '') {
+                $this->line($result);
+            }
+            return;
+        }
+        $this->runInteractive();
+    }
+
     protected function runInteractive(): void
     {
         $this->info('Shell - Type "help" for commands, "exit" to quit.');
