@@ -63,6 +63,31 @@ return [
         Illuminate\Console\Scheduling\ScheduleFinishCommand::class,
         Illuminate\Foundation\Console\VendorPublishCommand::class,
         LaravelZero\Framework\Commands\StubPublishCommand::class,
+
+        // db
+        Illuminate\Database\Console\WipeCommand::class,
+        Illuminate\Database\Console\Seeds\SeedCommand::class,
+
+        // make
+        LaravelZero\Framework\Commands\MakeCommand::class,
+        LaravelZero\Framework\Commands\TestMakeCommand::class,
+        Illuminate\Database\Console\Factories\FactoryMakeCommand::class,
+        Illuminate\Database\Console\Migrations\MigrateMakeCommand::class,
+        Illuminate\Foundation\Console\ModelMakeCommand::class,
+        Illuminate\Database\Console\Seeds\SeederMakeCommand::class,
+        Illuminate\Foundation\Console\TestMakeCommand::class,
+
+        // migrate
+        Illuminate\Database\Console\Migrations\MigrateCommand::class,
+        Illuminate\Database\Console\Migrations\FreshCommand::class,
+        Illuminate\Database\Console\Migrations\InstallCommand::class,
+        Illuminate\Database\Console\Migrations\RefreshCommand::class,
+        Illuminate\Database\Console\Migrations\ResetCommand::class,
+        Illuminate\Database\Console\Migrations\RollbackCommand::class,
+        Illuminate\Database\Console\Migrations\StatusCommand::class,
+
+        // tinker
+        Intonate\TinkerZero\Console\TinkerZeroCommand::class,
     ],
 
     /*
