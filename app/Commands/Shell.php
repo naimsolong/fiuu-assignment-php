@@ -14,35 +14,11 @@ use function Termwind\{render, renderUsing};
 
 class Shell extends Command
 {
-    const VERBS = [
-        'Accomplishing', 'Actioning', 'Actualizing', 'Architecting', 'Baking', 'Beaming', 'Bebopping',
-        'Befuddling', 'Billowing', 'Blanching', 'Bloviating', 'Boogieing', 'Boondoggling', 'Booping', 'Bootstrapping', 'Brewing',
-        'Bunning', 'Burrowing', 'Calculating', 'Canoodling', 'Caramelizing', 'Cascading', 'Catapulting', 'Cerebrating', 'Channeling',
-        'Channelling', 'Choreographing', 'Churning', 'Clauding', 'Coalescing', 'Cogitating', 'Combobulating', 'Composing', 'Computing',
-        'Concocting', 'Deliberating', 'Determining', 'Dilly-dallying', 'Discombobulating', 'Doing', 'Doodling', 'Drizzling', 'Ebbing',
-        'Effecting', 'Elucidating', 'Embellishing', 'Enchanting', 'Envisioning', 'Evaporating', 'Fermenting', 'Fiddle-faddling',
-        'Finagling', 'Flambéing', 'Flibbertigibbeting', 'Flowing', 'Flummoxing', 'Fluttering', 'Forging', 'Forming', 'Frolicking',
-        'Frosting', 'Gallivanting', 'Galloping', 'Garnishing', 'Generating', 'Gesticulating', 'Germinating', 'Gitifying', 'Grooving',
-        'Gusting', 'Harmonizing', 'Hashing', 'Hatching', 'Herding', 'Honking', 'Hullaballooing', 'Hyperspacing', 'Ideating', 'Imagining',
-        'Improvising', 'Incubating', 'Inferring', 'Infusing', 'Ionizing', 'Jitterbugging', 'Julienning', 'Kneading', 'Leavening',
-        'Levitating', 'Lollygagging', 'Manifesting', 'Marinating', 'Meandering', 'Metamorphosing', 'Misting', 'Moonwalking', 'Moseying',
-        'Mulling', 'Mustering', 'Musing', 'Nebulizing', 'Nesting', 'Newspapering', 'Noodling', 'Nucleating', 'Orbiting', 'Orchestrating',
-        'Osmosing', 'Perambulating', 'Percolating', 'Perusing', 'Philosophising', 'Photosynthesizing', 'Pollinating', 'Pondering',
-        'Pontificating', 'Pouncing', 'Precipitating', 'Prestidigitating', 'Processing', 'Proofing', 'Propagating', 'Puttering',
-        'Puzzling', 'Quantumizing', 'Razzle-dazzling', 'Razzmatazzing', 'Recombobulating', 'Reticulating', 'Roosting', 'Ruminating',
-        'Sautéing', 'Scampering', 'Schlepping', 'Scurrying', 'Seasoning', 'Shenaniganing', 'Shimmying', 'Simmering', 'Skedaddling',
-        'Sketching', 'Slithering', 'Smooshing', 'Sock-hopping', 'Spelunking', 'Spinning', 'Sprouting', 'Stewing', 'Sublimating',
-        'Swirling', 'Swooping', 'Symbioting', 'Synthesizing', 'Tempering', 'Thinking', 'Thundering', 'Tinkering', 'Tomfoolering',
-        'Topsy-turvying', 'Transfiguring', 'Transmuting', 'Twisting', 'Undulating', 'Unfurling', 'Unravelling', 'Vibing', 'Waddling',
-        'Wandering', 'Warping', 'Whatchamacalliting', 'Whirlpooling', 'Whirring', 'Whisking', 'Wibbling', 'Working', 'Wrangling',
-        'Zesting', 'Zigzagging',
-    ];
-
     protected CurrencyService $currencyService;
 
     protected TransactionService $transactionService;
 
-    protected $signature = 'shell {file? : The command file to process}';
+    protected $signature = 'shell';
 
     protected $description = 'Interactive transaction shell - accepts CREATE, AUTHORIZE, CAPTURE, VOID, REFUND, SETTLE, STATUS, LIST, EXIT';
 
@@ -57,14 +33,7 @@ class Shell extends Command
     public function handle(): int
     {
         $this->initiate();
-
-        $file = $this->argument('file');
-
-        if ($file) {
-            $this->processFile($file);
-        } else {
-            $this->runInteractive();
-        }
+        $this->runInteractive();
 
         return 0;
     }
@@ -96,50 +65,6 @@ class Shell extends Command
 
             if (str_starts_with($result, 'Goodbye')) break;
         }
-    }
-
-    protected function processFile(string $filepath): void
-    {
-        if (!file_exists($filepath)) {
-            $this->error("File not found: $filepath");
-            return;
-        }
-
-        $lines = file($filepath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $lineNumber = 0;
-        $totalLines = count($lines);
-
-        $this->info("Processing $totalLines commands...");
-        $this->newLine();
-
-        $verbIndex = 0;
-        $verbs = self::VERBS;
-        $spinner = ['|', '/', '-', '\\'];
-        $spinnerIndex = 0;
-
-        foreach ($lines as $line) {
-            $lineNumber++;
-
-            // Spinning loader animation
-            $currentVerb = $verbs[$verbIndex % count($verbs)];
-            $currentSpinner = $spinner[$spinnerIndex % count($spinner)];
-            $this->output->write("\r{$currentSpinner} $currentVerb...");
-
-            $result = $this->processCommand($line);
-
-            $verbIndex++;
-            $spinnerIndex++;
-
-            if (!empty(trim($line))) {
-                $this->output->write("\r" . str_repeat(' ', 20)); // Clear spinner line
-                $this->newLine();
-                $this->line("$lineNumber> $result");
-            }
-        }
-
-        $this->output->write("\r" . str_repeat(' ', 20));
-        $this->newLine(2);
-        $this->info("Done! Processed $lineNumber commands.");
     }
 
     protected function processCommand(string $line): string
