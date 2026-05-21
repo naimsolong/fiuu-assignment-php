@@ -9,7 +9,7 @@ use function Termwind\{render, renderUsing};
 
 class Account extends Shell
 {
-    protected $signature = 'account {args* : Command and arguments (omit to start interactive shell)}';
+    protected $signature = 'account {args?* : Command and arguments (omit to start interactive shell)}';
 
     protected $description = 'Account shell — run interactively or pass a command directly (e.g. account INFO)';
 

@@ -15,7 +15,7 @@ class Payment extends Shell
 
     protected TransactionService $transactionService;
 
-    protected $signature = 'payment {args* : Command and arguments (omit to start interactive shell)}';
+    protected $signature = 'payment {args?* : Command and arguments (omit to start interactive shell)}';
 
     protected $description = 'Transaction shell — run interactively or pass a command directly (e.g. payment CREATE P101 100 MYR 1)';
 
