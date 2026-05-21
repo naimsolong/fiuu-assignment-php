@@ -2,7 +2,9 @@
 
 namespace App\Commands;
 
+use App\Models\Account;
 use App\Models\Transaction;
+use App\Services\CurrencyService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 use LaravelZero\Framework\Commands\Command;
@@ -34,9 +36,20 @@ class Shell extends Command
         'Zesting', 'Zigzagging',
     ];
 
+    protected CurrencyService $currencyService;
+
     protected $signature = 'shell {file? : The command file to process}';
 
     protected $description = 'Interactive transaction shell - accepts CREATE, AUTHORIZE, CAPTURE, VOID, REFUND, SETTLE, STATUS, LIST, EXIT';
+
+    protected function __construct()
+    {
+        parent::__construct();
+
+        $this->currencyService = new CurrencyService();
+        
+        Account::ensureExists();
+    }
 
     public function handle(): int
     {
