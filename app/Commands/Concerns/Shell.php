@@ -84,9 +84,4 @@ abstract class Shell extends Command
 
         return '';
     }
-
-    public function schedule(Schedule $schedule): void
-    {
-        // not scheduled
-    }
 }

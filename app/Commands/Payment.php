@@ -15,7 +15,7 @@ class Payment extends Shell
 
     protected TransactionService $transactionService;
 
-    protected $signature = 'shell';
+    protected $signature = 'payment';
 
     protected $description = 'Interactive transaction shell - accepts CREATE, AUTHORIZE, CAPTURE, VOID, REFUND, SETTLE, STATUS, LIST, EXIT';
 
