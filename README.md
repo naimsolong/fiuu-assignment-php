@@ -53,10 +53,11 @@ app/
   Models/
     Account.php               # Single-row balance holder
     Transaction.php           # One row per payment
+    Refund.php                # Child record for each individual refund
   Services/
     CurrencyService.php       # brick/money wrapper; 28 BNM rates; cross-rate via MYR
     TransactionService.php    # Domain layer: create(), update(), all state transitions
-database/migrations/          # Accounts and transactions tables
+database/migrations/          # Accounts, transactions, and refunds tables
 tests/
   Feature/
     CommandParserTest.php     # Shell tokeniser, comment rules, alias, missing-arg errors
@@ -226,7 +227,7 @@ Cross-rate conversions route through MYR (e.g. USD → SGD goes USD → MYR → 
 
 - **Live exchange rates** — hardcoded BNM mid-market rates would be replaced by a real-time feed (e.g. OpenExchangeRates, BNM API). Rates would be cached with a TTL and refreshed asynchronously to avoid blocking transactions on network latency.
 - **Persistent batch tracking** — `SETTLEMENT` now assigns `batch_id` to untagged settled rows, but a production system would scope reports to a settlement window and support re-running a batch idempotently.
-- **Event sourcing / audit log** — instead of overwriting `status` in place, each state change would append an immutable event record (payment_id, from_status, to_status, actor, reason, timestamp). This gives a full audit trail without needing a separate `AUDIT` command.
+- **Event sourcing / audit log** — `AUDIT` currently reconstructs a timeline from nullable timestamp columns on `transactions` and child rows in `refunds`. A production system would append immutable event records (payment_id, from_status, to_status, actor, reason, timestamp) on every state change, making the audit log the source of truth rather than a derived view.
 - **Concurrency control** — the current SQLite + `DB::transaction` approach is sufficient for single-process CLI use, but in a multi-process or distributed environment, optimistic locking (version column) or database-level row locking would be needed to prevent double-capture or double-settle.
 - **Configurable thresholds via environment** — `PRE_SETTLEMENT_REVIEW` threshold and other business rules would be driven by `.env` / config rather than constants.
 - **Structured error codes** — error responses would include machine-readable codes (e.g. `INVALID_TRANSITION`, `DUPLICATE_PAYMENT_ID`) rather than free-form strings, to support downstream automation.
