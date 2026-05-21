@@ -16,9 +16,7 @@ return new class extends Migration
             $table->string('merchant_id');
             $table->unsignedBigInteger('amount');
             $table->char('currency', 3);
-            $table->enum('status', array_column(TransactionStatus::cases(), 'value'))
-                  ->default(TransactionStatus::Initiated->value);
-            $table->unsignedBigInteger('refund_amount')->nullable();
+            $table->string('status')->default(TransactionStatus::Initiated->value);
             $table->string('void_reason')->nullable();
             $table->string('failed_reason')->nullable();
             $table->string('batch_id')->nullable();
@@ -26,7 +24,6 @@ return new class extends Migration
             $table->timestamp('captured_at')->nullable();
             $table->timestamp('settled_at')->nullable();
             $table->timestamp('voided_at')->nullable();
-            $table->timestamp('refunded_at')->nullable();
             $table->timestamp('failed_at')->nullable();
             $table->timestamps();
         });

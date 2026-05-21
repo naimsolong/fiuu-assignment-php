@@ -10,6 +10,7 @@ enum TransactionStatus: string
     case Captured             = 'CAPTURED';
     case Settled              = 'SETTLED';
     case Voided               = 'VOIDED';
+    case PartiallyRefunded    = 'PARTIALLY_REFUNDED';
     case Refunded             = 'REFUNDED';
     case Failed               = 'FAILED';
 }

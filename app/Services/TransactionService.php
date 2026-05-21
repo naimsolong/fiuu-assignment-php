@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\TransactionStatus;
 use App\Models\Account;
+use App\Models\Refund;
 use App\Models\Transaction;
 use Brick\Money\Money;
 use Illuminate\Support\Facades\DB;
@@ -148,24 +149,37 @@ class TransactionService
     /** @return array{idempotent: false, transaction: Transaction} */
     private function refund(Transaction $transaction, ?string $amountDecimal): array
     {
-        if ($transaction->status !== TransactionStatus::Captured) {
+        if (!in_array($transaction->status, [TransactionStatus::Captured, TransactionStatus::PartiallyRefunded], true)) {
             throw new \RuntimeException("Invalid transition - cannot REFUND from {$transaction->status->value}");
         }
 
-        $refundMinor = $amountDecimal !== null
+        $newRefundMinor = $amountDecimal !== null
             ? $this->toMinorUnits($amountDecimal, $transaction->currency)
             : $transaction->amount;
 
-        if ($refundMinor > $transaction->amount) {
-            throw new \RuntimeException("Refund amount exceeds original transaction amount");
+        $totalRefunded = (int) $transaction->refunds()->sum('amount');
+        $remaining     = $transaction->amount - $totalRefunded;
+
+        if ($newRefundMinor > $remaining) {
+            $requestedDecimal = Money::ofMinor($newRefundMinor, $transaction->currency)->getAmount()->__toString();
+            $remainingDecimal = Money::ofMinor($remaining, $transaction->currency)->getAmount()->__toString();
+            throw new \RuntimeException(
+                "Refund amount {$requestedDecimal} {$transaction->currency} exceeds remaining refundable amount {$remainingDecimal} {$transaction->currency}"
+            );
         }
 
-        $myrRefundMinor = $this->currencyService->convertMinorUnits($refundMinor, $transaction->currency, 'MYR');
+        $fullyRefunded  = ($totalRefunded + $newRefundMinor) === $transaction->amount;
+        $newStatus      = $fullyRefunded ? TransactionStatus::Refunded : TransactionStatus::PartiallyRefunded;
+        $myrRefundMinor = $this->currencyService->convertMinorUnits($newRefundMinor, $transaction->currency, 'MYR');
 
-        DB::transaction(function () use ($transaction, $refundMinor, $myrRefundMinor) {
-            $transaction->status        = TransactionStatus::Refunded;
-            $transaction->refund_amount = $refundMinor;
-            $transaction->refunded_at   = now();
+        DB::transaction(function () use ($transaction, $newRefundMinor, $newStatus, $myrRefundMinor) {
+            Refund::create([
+                'transaction_id' => $transaction->id,
+                'amount'         => $newRefundMinor,
+                'currency'       => $transaction->currency,
+            ]);
+
+            $transaction->status = $newStatus;
             $transaction->save();
 
             Account::ensureExists()->decrement('balance', $myrRefundMinor);

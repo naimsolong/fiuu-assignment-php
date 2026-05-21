@@ -57,7 +57,8 @@ test('CREATE → AUTHORIZE → CAPTURE → REFUND (full)', function () {
     $result = $this->service->update('P005', 'REFUND');
 
     expect($result['transaction']->status)->toBe(TransactionStatus::Refunded);
-    expect($result['transaction']->refund_amount)->toBe(3000);
+    expect($result['transaction']->refunds()->sum('amount'))->toBe(3000);
+    expect($result['transaction']->refunds()->count())->toBe(1);
 });
 
 test('REFUND with partial amount', function () {
@@ -66,8 +67,9 @@ test('REFUND with partial amount', function () {
     $this->service->update('P006', 'CAPTURE');
     $result = $this->service->update('P006', 'REFUND', ['amount' => '20.00']);
 
-    expect($result['transaction']->status)->toBe(TransactionStatus::Refunded);
-    expect($result['transaction']->refund_amount)->toBe(2000);
+    expect($result['transaction']->status)->toBe(TransactionStatus::PartiallyRefunded);
+    expect($result['transaction']->refunds()->sum('amount'))->toBe(2000);
+    expect($result['transaction']->refunds()->count())->toBe(1);
 });
 
 test('account balance decrements on REFUND', function () {
@@ -158,7 +160,7 @@ test('REFUND amount exceeding original throws', function () {
     $this->service->update('P025', 'CAPTURE');
 
     expect(fn () => $this->service->update('P025', 'REFUND', ['amount' => '11.00']))
-        ->toThrow(\RuntimeException::class, 'Refund amount exceeds');
+        ->toThrow(\RuntimeException::class, 'exceeds remaining refundable');
 });
 
 test('unknown action throws', function () {
@@ -210,4 +212,51 @@ test('operation on non-existent payment_id throws', function () {
 test('unsupported currency throws on CREATE', function () {
     expect(fn () => $this->service->create('P040', '10.00', 'XYZ', 'M01'))
         ->toThrow(\RuntimeException::class, "Unsupported currency 'XYZ'");
+});
+
+// ---------------------------------------------------------------------------
+// Partial refunds
+// ---------------------------------------------------------------------------
+
+test('partial REFUND from CAPTURED sets PARTIALLY_REFUNDED', function () {
+    $this->service->create('P050', '100.00', 'MYR', 'M01');
+    $this->service->update('P050', 'AUTHORIZE');
+    $this->service->update('P050', 'CAPTURE');
+    $result = $this->service->update('P050', 'REFUND', ['amount' => '60.00']);
+
+    expect($result['transaction']->status)->toBe(TransactionStatus::PartiallyRefunded);
+    expect($result['transaction']->refunds()->count())->toBe(1);
+    expect($result['transaction']->refunds()->sum('amount'))->toBe(6000);
+});
+
+test('second partial REFUND from PARTIALLY_REFUNDED completes to REFUNDED', function () {
+    $this->service->create('P051', '100.00', 'MYR', 'M01');
+    $this->service->update('P051', 'AUTHORIZE');
+    $this->service->update('P051', 'CAPTURE');
+    $this->service->update('P051', 'REFUND', ['amount' => '60.00']);
+    $result = $this->service->update('P051', 'REFUND', ['amount' => '40.00']);
+
+    expect($result['transaction']->status)->toBe(TransactionStatus::Refunded);
+    expect($result['transaction']->refunds()->count())->toBe(2);
+    expect($result['transaction']->refunds()->sum('amount'))->toBe(10000);
+});
+
+test('REFUND exceeding remaining after partial refund throws', function () {
+    $this->service->create('P052', '100.00', 'MYR', 'M01');
+    $this->service->update('P052', 'AUTHORIZE');
+    $this->service->update('P052', 'CAPTURE');
+    $this->service->update('P052', 'REFUND', ['amount' => '60.00']);
+
+    expect(fn () => $this->service->update('P052', 'REFUND', ['amount' => '60.00']))
+        ->toThrow(\RuntimeException::class, 'exceeds remaining refundable');
+});
+
+test('REFUND from REFUNDED status throws', function () {
+    $this->service->create('P053', '50.00', 'MYR', 'M01');
+    $this->service->update('P053', 'AUTHORIZE');
+    $this->service->update('P053', 'CAPTURE');
+    $this->service->update('P053', 'REFUND');
+
+    expect(fn () => $this->service->update('P053', 'REFUND'))
+        ->toThrow(\RuntimeException::class, 'Invalid transition');
 });

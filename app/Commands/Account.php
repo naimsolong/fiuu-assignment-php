@@ -5,6 +5,7 @@ namespace App\Commands;
 use App\Commands\Concerns\Shell;
 use App\Models\Account as AccountModel;
 use App\Models\Transaction;
+use Brick\Money\Money;
 use function Termwind\{render, renderUsing};
 
 class Account extends Shell
@@ -49,7 +50,7 @@ HTML
 
     protected function cmdInfo(): string
     {
-        $account      = AccountModel::with('transactions')->first();
+        $account      = AccountModel::with('transactions.refunds')->first();
         $balanceMyr   = number_format($account->balance / 100, 2);
         $transactions = $account->transactions;
 
@@ -64,13 +65,16 @@ HTML
             $lines[] = "Transactions ({$transactions->count()}):";
             foreach ($transactions as $t) {
                 $line = "  {$t->payment_id} {$t->status->value} {$t->amount} {$t->currency} merchant={$t->merchant_id}";
-                if ($t->refund_amount) {
-                    $line .= " refund={$t->refund_amount}";
-                }
                 if ($t->void_reason) {
                     $line .= " reason={$t->void_reason}";
                 }
                 $lines[] = $line;
+
+                foreach ($t->refunds as $i => $refund) {
+                    $refDec  = Money::ofMinor($refund->amount, $refund->currency)->getAmount()->__toString();
+                    $prefix  = $i === 0 ? '    refunds: ' : '             ';
+                    $lines[] = "{$prefix}{$refDec} {$refund->currency} @ {$refund->created_at->format('Y-m-d H:i:s')}";
+                }
             }
         }
 

@@ -7,6 +7,7 @@ use App\Enums\TransactionStatus;
 use App\Models\Transaction;
 use App\Services\CurrencyService;
 use App\Services\TransactionService;
+use Brick\Money\Money;
 use function Termwind\{render, renderUsing};
 
 class Payment extends Shell
@@ -48,7 +49,7 @@ class Payment extends Shell
             'SETTLEMENT'            => $this->cmdSettlement($tokens),
             'STATUS'                => $this->cmdStatus($tokens),
             'LIST'                  => $this->cmdList($tokens),
-            'AUDIT'                 => 'AUDIT RECEIVED',
+            'AUDIT'                 => $this->cmdAudit($tokens),
             default                 => "ERROR: Unknown command '$command'",
         };
     }
@@ -68,7 +69,7 @@ class Payment extends Shell
 <div><span class="text-green">SETTLEMENT</span> <span class="text-white">&lt;batch_id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Settlement batch (reporting)</span></div>
 <div><span class="text-green">STATUS</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Show transaction status</span></div>
 <div><span class="text-green">LIST</span><br><span class="mx-1"></span><span class="text-gray">- List all transactions</span></div>
-<div><span class="text-green">AUDIT</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Audit (no effect)</span></div>
+<div><span class="text-green">AUDIT</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Chronological event history for a transaction</span></div>
 <div><span class="text-green">EXIT</span><br><span class="mx-1"></span><span class="text-gray">- Exit shell</span></div>
 </div>
 HTML
@@ -170,11 +171,75 @@ HTML
         $amount = $tokens[2] ?? null;
 
         try {
-            $this->transactionService->update($id, 'REFUND', array_filter(['amount' => $amount], fn ($v) => $v !== null));
-            return $amount ? "OK: $id state=REFUNDED amount=$amount" : "OK: $id state=REFUNDED";
+            $result        = $this->transactionService->update($id, 'REFUND', array_filter(['amount' => $amount], fn ($v) => $v !== null));
+            $t             = $result['transaction'];
+            $totalRefunded = (int) $t->refunds()->sum('amount');
+            $remaining     = $t->amount - $totalRefunded;
+            $currency      = $t->currency;
+            $status        = $t->status->value;
+            $refDec        = Money::ofMinor($totalRefunded, $currency)->getAmount()->__toString();
+            $remDec        = Money::ofMinor($remaining, $currency)->getAmount()->__toString();
+
+            if ($t->status === TransactionStatus::Refunded) {
+                return "OK: $id state=$status refunded=$refDec $currency (fully refunded)";
+            }
+
+            return "OK: $id state=$status refunded=$refDec remaining=$remDec $currency";
         } catch (\RuntimeException $e) {
             return "ERROR: {$e->getMessage()}";
         }
+    }
+
+    protected function cmdAudit(array $tokens): string
+    {
+        if (count($tokens) < 2) {
+            return 'ERROR: AUDIT requires <payment_id>';
+        }
+
+        $id          = $tokens[1];
+        $transaction = Transaction::findByPaymentId($id);
+
+        if (!$transaction) {
+            return "ERROR: Transaction '$id' not found";
+        }
+
+        $log   = $transaction->getAuditLog();
+        $lines = ["AUDIT $id"];
+
+        foreach ($log as $entry) {
+            $at     = $entry['at']->format('Y-m-d H:i:s');
+            $event  = $entry['event'];
+            $meta   = $entry['meta'];
+            $suffix = '';
+
+            switch ($event) {
+                case 'INITIATED':
+                    $amtDec  = Money::ofMinor($meta['amount'], $meta['currency'])->getAmount()->__toString();
+                    $suffix  = "{$amtDec} {$meta['currency']} {$meta['merchant_id']}";
+                    break;
+
+                case 'REFUND':
+                    $amtDec     = Money::ofMinor($meta['amount'], $meta['currency'])->getAmount()->__toString();
+                    $runningDec = Money::ofMinor($meta['running_total'], $meta['currency'])->getAmount()->__toString();
+                    $totalDec   = Money::ofMinor($meta['transaction_amount'], $meta['currency'])->getAmount()->__toString();
+                    $suffix     = "{$amtDec} {$meta['currency']}  (refunded {$runningDec} / {$totalDec})";
+                    break;
+
+                case 'VOIDED':
+                    $suffix = isset($meta['reason']) ? "reason={$meta['reason']}" : '';
+                    break;
+
+                case 'FAILED':
+                    $suffix = isset($meta['reason']) ? "reason={$meta['reason']}" : '';
+                    break;
+            }
+
+            $lines[] = $suffix
+                ? "[{$at}] " . str_pad($event, 22) . $suffix
+                : "[{$at}] {$event}";
+        }
+
+        return implode("\n", $lines);
     }
 
     protected function cmdSettle(array $tokens): string
