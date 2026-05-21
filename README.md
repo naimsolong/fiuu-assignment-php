@@ -25,10 +25,18 @@ php payment-cli payment
 php payment-cli account
 ```
 
+**One-shot (non-interactive):**
+```bash
+php payment-cli payment CREATE P101 100 MYR merchant1
+php payment-cli payment AUTHORIZE P101
+php payment-cli account INFO
+```
+
 **Building a standalone binary (PHAR):**
 ```bash
 php payment-cli app:build payment-cli
 ./builds/payment-cli payment
+./builds/payment-cli payment CREATE P101 100 MYR merchant1
 ./builds/payment-cli account
 ```
 
@@ -77,13 +85,19 @@ Tests use an in-memory SQLite database (configured in `phpunit.xml.dist`) and re
 
 ### Account
 
-**Start interactive shell:**
+**Interactive shell:**
 ```bash
 // Development
 php payment-cli account
 
-// Binary file
+// Binary
 ./payment-cli account
+```
+
+**One-shot (non-interactive):**
+```bash
+php payment-cli account INFO
+./payment-cli account RESET
 ```
 
 **Available commands:**
@@ -106,13 +120,19 @@ EXIT / QUIT
 
 ### Payment
 
-**Start interactive Shell:**
+**Interactive shell:**
 ```bash
 // Development
 php payment-cli payment
 
-// Binary file
+// Binary
 ./payment-cli payment
+```
+
+**One-shot (non-interactive):**
+```bash
+php payment-cli payment CREATE P101 100 MYR merchant1
+./payment-cli payment SETTLE P101
 ```
 
 **Available commands:**
@@ -198,7 +218,7 @@ Cross-rate conversions route through MYR (e.g. USD → SGD goes USD → MYR → 
 ## Production Differences
 
 - **Live exchange rates** — hardcoded BNM mid-market rates would be replaced by a real-time feed (e.g. OpenExchangeRates, BNM API). Rates would be cached with a TTL and refreshed asynchronously to avoid blocking transactions on network latency.
-- **Persistent batch tracking** — `SETTLEMENT` would store a `batch_id` on each transaction row and produce proper settlement reports scoped to a settlement window rather than scanning all settled transactions.
+- **Persistent batch tracking** — `SETTLEMENT` now assigns `batch_id` to untagged settled rows, but a production system would scope reports to a settlement window and support re-running a batch idempotently.
 - **Event sourcing / audit log** — instead of overwriting `status` in place, each state change would append an immutable event record (payment_id, from_status, to_status, actor, reason, timestamp). This gives a full audit trail without needing a separate `AUDIT` command.
 - **Concurrency control** — the current SQLite + `DB::transaction` approach is sufficient for single-process CLI use, but in a multi-process or distributed environment, optimistic locking (version column) or database-level row locking would be needed to prevent double-capture or double-settle.
 - **Configurable thresholds via environment** — `PRE_SETTLEMENT_REVIEW` threshold and other business rules would be driven by `.env` / config rather than constants.

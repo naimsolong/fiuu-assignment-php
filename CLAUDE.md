@@ -71,7 +71,13 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
 
 ## Payment Command
 
-`App\Commands\Payment` — the primary interactive shell (`php payment-cli payment`) for the full transaction pipeline. Extends the `Shell` abstract base and owns two injected services: `CurrencyService` and `TransactionService`.
+`App\Commands\Payment` — the primary shell (`php payment-cli payment`) for the full transaction pipeline. Supports both interactive and one-shot (non-interactive) mode. Extends the `Shell` abstract base and owns two injected services: `CurrencyService` and `TransactionService`.
+
+**One-shot mode:** pass the command and arguments directly — the shell runs once and exits.
+```bash
+php payment-cli payment CREATE P101 100 MYR merchant1
+./payment-cli payment AUTHORIZE P101
+```
 
 | Command | Arguments | Effect |
 |---------|-----------|--------|
@@ -81,7 +87,7 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
 | `VOID` | `<payment_id> [reason]` | Transitions to `VOIDED`; optional reason string stored on the row |
 | `REFUND` | `<payment_id> [amount]` | Transitions to `REFUNDED`; optional partial amount, defaults to full |
 | `SETTLE` | `<payment_id>` | Transitions to `SETTLED`; increments account balance; idempotent |
-| `SETTLEMENT` | `<batch_id>` | Read-only report — counts all `SETTLED` transactions and sums MYR total |
+| `SETTLEMENT` | `<batch_id>` | Assigns `batch_id` to all untagged `SETTLED` rows, then reports count and MYR total |
 | `STATUS` | `<payment_id>` | Prints `payment_id status amount currency merchant_id` for one transaction |
 | `LIST` | _(none)_ | Prints `payment_id status amount currency` for every transaction |
 | `AUDIT` | `<payment_id>` | Accepted but currently a no-op stub |
@@ -90,12 +96,18 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
 
 - `CREATE` validates amount format (`/^\d+(\.\d{1,2})?$/`) and currency format (`/^[A-Z]{3}$/`) before delegating to `TransactionService::create()`.
 - `AUTH` is registered as an alias for `AUTHORIZE` in the `dispatchCommand` match expression.
-- `SETTLEMENT` scans all `SETTLED` rows; it is a reporting-only command and does not transition any status.
+- `SETTLEMENT` writes the `batch_id` to all `SETTLED` rows where `batch_id IS NULL` before querying, so each transaction is tagged exactly once.
 - All state-transition commands delegate entirely to `TransactionService::update()`; the command layer only formats the response string.
 
 ## Account Command
 
-`App\Commands\Account` — a second interactive shell (`php payment-cli account`) for inspecting and resetting the application account. Extends the same `Shell` abstract base as `Payment`.
+`App\Commands\Account` — a second shell (`php payment-cli account`) for inspecting and resetting the application account. Supports both interactive and one-shot mode. Extends the same `Shell` abstract base as `Payment`.
+
+**One-shot mode:**
+```bash
+php payment-cli account INFO
+./payment-cli account RESET
+```
 
 | Command | Effect |
 |---------|--------|
@@ -141,7 +153,7 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
 - **SETTLE** — finalises collection; increments account balance by the amount converted to MYR. Idempotent if already `SETTLED`.
 - **VOID** — cancels before capture. No balance change. Optional `reason` string.
 - **REFUND** — returns money after capture. Decrements account balance by the refund amount (MYR). Optional partial amount; defaults to full amount.
-- **SETTLEMENT** — read-only batch report. Accepts a `batch_id` label and returns count + total MYR of all `SETTLED` transactions. Does not change any status.
+- **SETTLEMENT** — batch report. Accepts a `batch_id` label, tags all untagged `SETTLED` rows with it, then returns count + total MYR of all `SETTLED` transactions. Does not change any transaction status.
 
 ## Statuses
 
