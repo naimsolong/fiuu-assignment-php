@@ -19,6 +19,7 @@
         "php": "^8.2",
         "illuminate/database": "^12.17",
         "illuminate/redis": "^12.17",
+        "intonate/tinker-zero": "^1.2",
         "laravel-zero/framework": "^12.0.2"
     },
     "require-dev": {

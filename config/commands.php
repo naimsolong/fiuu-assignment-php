@@ -40,7 +40,7 @@ return [
     */
 
     'add' => [
-        //
+        App\Commands\Shell::class,
     ],
 
     /*
