@@ -81,6 +81,58 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
 
 ---
 
+# Transaction Lifecycle
+
+## Commands
+
+| Command | From status | To status | Balance impact |
+|---------|------------|-----------|----------------|
+| `CREATE` | — | `INITIATED` | None |
+| `AUTHORIZE` | `INITIATED` | `AUTHORIZED` or `PRE_SETTLEMENT_REVIEW` | None |
+| `CAPTURE` | `AUTHORIZED` \| `PRE_SETTLEMENT_REVIEW` | `CAPTURED` | None |
+| `SETTLE` | `CAPTURED` | `SETTLED` | `+amount` (MYR) |
+| `VOID` | `INITIATED` \| `AUTHORIZED` | `VOIDED` | None |
+| `REFUND` | `CAPTURED` | `REFUNDED` | `-refund_amount` (MYR) |
+| `SETTLEMENT` | _(read-only report)_ | — | None |
+
+## Descriptions
+
+- **CREATE** — registers a transaction intent. Produces an `INITIATED` record. No money moves.
+- **AUTHORIZE** — verifies and reserves the funds. Transitions to `PRE_SETTLEMENT_REVIEW` if amount ≥ MYR 1,000.00 (100,000 minor units). Still no balance change.
+- **CAPTURE** — commits the reserved funds for collection. Balance still unchanged until `SETTLE`.
+- **SETTLE** — finalises collection; increments account balance by the amount converted to MYR. Idempotent if already `SETTLED`.
+- **VOID** — cancels before capture. No balance change. Optional `reason` string.
+- **REFUND** — returns money after capture. Decrements account balance by the refund amount (MYR). Optional partial amount; defaults to full amount.
+- **SETTLEMENT** — read-only batch report. Accepts a `batch_id` label and returns count + total MYR of all `SETTLED` transactions. Does not change any status.
+
+## Statuses
+
+| Status | Meaning |
+|--------|---------|
+| `INITIATED` | Transaction created, awaiting authorization |
+| `AUTHORIZED` | Funds reserved/held on payer's side |
+| `PRE_SETTLEMENT_REVIEW` | Authorized but flagged for review — amount ≥ MYR 1,000.00 |
+| `CAPTURED` | Funds committed for collection, pending settlement |
+| `SETTLED` | Funds collected, account balance updated |
+| `VOIDED` | Cancelled before capture, no money moved |
+| `REFUNDED` | Money returned after capture, balance decremented |
+| `FAILED` | Set automatically by `CREATE` when a duplicate `payment_id` is submitted with mismatched `amount`, `currency`, or `merchant_id` |
+
+## Happy Path
+
+```
+CREATE → AUTHORIZE → CAPTURE → SETTLE
+```
+
+## Cancellation Paths
+
+```
+CREATE → AUTHORIZE → VOID          (before capture)
+CREATE → AUTHORIZE → CAPTURE → REFUND   (after capture)
+```
+
+---
+
 # Currency
 
 ## Service
