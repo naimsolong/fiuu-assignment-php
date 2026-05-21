@@ -34,7 +34,7 @@ php payment-cli account INFO
 
 **Building a standalone binary (PHAR):**
 ```bash
-php payment-cli app:build payment-cli
+php payment-cli app:build
 ./builds/payment-cli payment
 ./builds/payment-cli payment CREATE P101 100 MYR merchant1
 ./builds/payment-cli account
