@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 use LaravelZero\Framework\Commands\Command;
+use function Termwind\{render};
 
 class Shell extends Command
 {
@@ -160,20 +161,25 @@ class Shell extends Command
 
     protected function help(): string
     {
-        return <<<'HELP'
-Commands:
-  CREATE <id> <amount> <currency> <merchant_id>  - Create transaction
-  AUTHORIZE <id>                              - Authorize transaction
-  CAPTURE <id>                               - Capture transaction
-  VOID <id> [reason]                       - Void transaction
-  REFUND <id> [amount]                    - Refund transaction
-  SETTLE <id>                             - Settle transaction
-  SETTLEMENT <batch_id>                   - Settlement batch (reporting)
-  STATUS <id>                            - Show transaction status
-  LIST                                    - List all transactions
-  AUDIT <id>                             - Audit (no effect)
-  EXIT                                    - Exit shell
-HELP;
+        render(<<<'HTML'
+<div>
+<div class="font-bold text-yellow mb-1">Commands:</div>
+<div><span class="text-green">CREATE</span> <span class="text-white">&lt;id&gt; &lt;amount&gt; &lt;currency&gt; &lt;merchant_id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Create transaction</span></div>
+<div><span class="text-green">AUTHORIZE</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Authorize transaction</span></div>
+<div><span class="text-green">CAPTURE</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Capture transaction</span></div>
+<div><span class="text-green">VOID</span> <span class="text-white">&lt;id&gt; [reason]</span><br><span class="mx-1"></span><span class="text-gray">- Void transaction</span></div>
+<div><span class="text-green">REFUND</span> <span class="text-white">&lt;id&gt; [amount]</span><br><span class="mx-1"></span><span class="text-gray">- Refund transaction</span></div>
+<div><span class="text-green">SETTLE</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Settle transaction</span></div>
+<div><span class="text-green">SETTLEMENT</span> <span class="text-white">&lt;batch_id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Settlement batch (reporting)</span></div>
+<div><span class="text-green">STATUS</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Show transaction status</span></div>
+<div><span class="text-green">LIST</span><br><span class="mx-1"></span><span class="text-gray">- List all transactions</span></div>
+<div><span class="text-green">AUDIT</span> <span class="text-white">&lt;id&gt;</span><br><span class="mx-1"></span><span class="text-gray">- Audit (no effect)</span></div>
+<div><span class="text-green">EXIT</span><br><span class="mx-1"></span><span class="text-gray">- Exit shell</span></div>
+</div>
+HTML
+        );
+
+        return '';
     }
 
     protected function cmdCreate(array $tokens): string
