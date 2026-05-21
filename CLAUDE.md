@@ -78,3 +78,33 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
 - **Integer amounts** — `amount`, `refund_amount`, and `balance` are stored as `BIGINT UNSIGNED` in minor units (e.g. `1000` = MYR 10.00). Decimal conversion is handled at the application layer based on currency exponent
 - **`TransactionStatus` enum** — all valid statuses live in `app/Enums/TransactionStatus.php` as a backed string enum. Migration derives values via `array_column(TransactionStatus::cases(), 'value')` — never hardcode status strings elsewhere
 - **Model cast** — `Transaction::$casts` maps `status` to `TransactionStatus::class`, so `$transaction->status` is always an enum instance
+
+---
+
+# Currency
+
+## Service
+
+`App\Services\CurrencyService` — wraps `brick/money` (`^0.11.2`) with a `ConfigurableProvider`.
+
+- **Base currency**: `MYR`
+- **28 supported currencies** — see `docs/exchange-rates.md` for the full table
+- **Rates source**: BNM Interbank Foreign Exchange Market, mid-market as of 2026-05-21
+- **Cross-rates** route through MYR (e.g. USD → SGD goes USD → MYR → SGD)
+- **Reciprocal rates** (MYR → X) are derived at construction via `bcdiv('1', $rate, 10)`
+- Instantiated in `Shell::__construct()` and available as `$this->currencyService`
+
+## Key Methods
+
+| Method | Input/Output |
+|--------|-------------|
+| `convertMinorUnits(int $amount, string $from, string $to): int` | Minor units in → minor units out |
+| `convert(Money $money, string $to): Money` | `Money` instance in → `Money` instance out |
+| `supports(string $code): bool` | Check if an ISO code is supported before use |
+| `supportedCurrencies(): array` | Returns all 28 supported ISO codes |
+
+## Design Decisions
+
+- Non-1 unit base currencies (JPY, HKD, IDR, etc.) are normalised to per-1-unit at declaration time — the table in `docs/exchange-rates.md` shows original units for reference
+- `RoundingMode::HalfUp` applied at each conversion step (PascalCase — `HALF_UP` is deprecated in `brick/math`)
+- Unsupported currencies throw `CurrencyConversionException` from `brick/money`
