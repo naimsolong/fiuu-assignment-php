@@ -22,12 +22,14 @@ The application is self-bootstrapping: on first run it creates the SQLite databa
 **Interactive shell:**
 ```bash
 php payment-cli payment
+php payment-cli account
 ```
 
 **Building a standalone binary (PHAR):**
 ```bash
 php payment-cli app:build payment-cli
 ./builds/payment-cli payment
+./builds/payment-cli account
 ```
 
 ### Project structure
@@ -37,6 +39,7 @@ app/
   Commands/
     Concerns/Shell.php        # Abstract shell: input loop, tokeniser, comment stripping
     Payment.php               # Concrete command: dispatches tokens to service calls
+    Account.php               # Concrete command: account inspection and reset
   Enums/
     TransactionStatus.php     # Backed string enum for all valid statuses
   Models/
@@ -71,6 +74,35 @@ Tests use an in-memory SQLite database (configured in `phpunit.xml.dist`) and re
 ---
 
 ## Commands
+
+### Account
+
+**Start interactive shell:**
+```bash
+// Development
+php payment-cli account
+
+// Binary file
+./payment-cli account
+```
+
+**Available commands:**
+
+```
+INFO
+RESET
+HELP
+EXIT / QUIT
+```
+
+| Command | Description |
+|---------|-------------|
+| `INFO` | Display account details (ID, balance, creation date) and a list of all transactions |
+| `RESET` | Zero the account balance and permanently delete all transaction records |
+| `HELP` | Show available commands |
+| `EXIT` / `QUIT` | Exit the shell |
+
+---
 
 ### Payment
 
@@ -155,7 +187,7 @@ To change the threshold, update this constant (or expose it via an environment v
 
 ## Currency Support
 
-28 currencies are supported, all sourced from the BNM Interbank Foreign Exchange Market mid-market rates as of 2026-05-21. See `docs/exchange-rates.md` for the full table.
+28 currencies are supported, all sourced from the BNM Interbank Foreign Exchange Market mid-market rates as of 2026-05-21.
 
 **Supported ISO codes:** AED, AUD, BND, CAD, CHF, CNY, EGP, EUR, GBP, HKD, IDR, INR, JPY, KHR, KRW, MMK, MYR, NPR, NZD, PHP, PKR, SAR, SGD, THB, TWD, USD, VND, ZAR
 

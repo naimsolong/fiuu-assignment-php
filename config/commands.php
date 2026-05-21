@@ -41,6 +41,7 @@ return [
 
     'add' => [
         App\Commands\Payment::class,
+        App\Commands\Account::class,
     ],
 
     /*

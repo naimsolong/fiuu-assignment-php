@@ -69,6 +69,44 @@ transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
               created_at, updated_at
 ```
 
+## Payment Command
+
+`App\Commands\Payment` — the primary interactive shell (`php payment-cli payment`) for the full transaction pipeline. Extends the `Shell` abstract base and owns two injected services: `CurrencyService` and `TransactionService`.
+
+| Command | Arguments | Effect |
+|---------|-----------|--------|
+| `CREATE` | `<payment_id> <amount> <currency> <merchant_id>` | Creates an `INITIATED` transaction; idempotent on exact duplicate |
+| `AUTHORIZE` / `AUTH` | `<payment_id>` | Transitions to `AUTHORIZED` or `PRE_SETTLEMENT_REVIEW` |
+| `CAPTURE` | `<payment_id>` | Transitions to `CAPTURED` |
+| `VOID` | `<payment_id> [reason]` | Transitions to `VOIDED`; optional reason string stored on the row |
+| `REFUND` | `<payment_id> [amount]` | Transitions to `REFUNDED`; optional partial amount, defaults to full |
+| `SETTLE` | `<payment_id>` | Transitions to `SETTLED`; increments account balance; idempotent |
+| `SETTLEMENT` | `<batch_id>` | Read-only report — counts all `SETTLED` transactions and sums MYR total |
+| `STATUS` | `<payment_id>` | Prints `payment_id status amount currency merchant_id` for one transaction |
+| `LIST` | _(none)_ | Prints `payment_id status amount currency` for every transaction |
+| `AUDIT` | `<payment_id>` | Accepted but currently a no-op stub |
+| `HELP` | _(none)_ | Displays command reference |
+| `EXIT` / `QUIT` | _(none)_ | Exits the shell |
+
+- `CREATE` validates amount format (`/^\d+(\.\d{1,2})?$/`) and currency format (`/^[A-Z]{3}$/`) before delegating to `TransactionService::create()`.
+- `AUTH` is registered as an alias for `AUTHORIZE` in the `dispatchCommand` match expression.
+- `SETTLEMENT` scans all `SETTLED` rows; it is a reporting-only command and does not transition any status.
+- All state-transition commands delegate entirely to `TransactionService::update()`; the command layer only formats the response string.
+
+## Account Command
+
+`App\Commands\Account` — a second interactive shell (`php payment-cli account`) for inspecting and resetting the application account. Extends the same `Shell` abstract base as `Payment`.
+
+| Command | Effect |
+|---------|--------|
+| `INFO` | Prints account ID, MYR balance, creation timestamp, and all transactions (payment_id, status, amount, currency, merchant_id; plus refund_amount and void_reason when present) |
+| `RESET` | Deletes all transaction rows and zeros the account balance — **destructive, no confirmation prompt** |
+| `HELP` | Lists available commands |
+| `EXIT` / `QUIT` | Exits the shell |
+
+- Balance displayed by `INFO` is converted from minor units (`balance / 100`) and formatted to 2 decimal places.
+- `RESET` is intended for development/testing workflows. In production this would require an explicit confirmation guard.
+
 ## Key Design Decisions
 
 - **One account per app instance** — the account is a balance holder, not a merchant identity
