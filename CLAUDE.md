@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **fiuu-assignment-php** (39 symbols, 37 relationships, 0 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **fiuu-assignment-php** (220 symbols, 465 relationships, 19 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -64,9 +64,17 @@ accounts: id, balance, created_at, updated_at
 
 ```sql
 transactions: id, payment_id, account_id, merchant_id, amount, currency, status,
-              refund_amount, void_reason, failed_reason, batch_id,
-              authorized_at, captured_at, settled_at, voided_at, refunded_at, failed_at,
+              void_reason, failed_reason, batch_id,
+              authorized_at, captured_at, settled_at, voided_at, failed_at,
               created_at, updated_at
+```
+
+### `refunds`
+- One row per `REFUND` call, keyed to `transaction_id`
+- Supports multiple partial refunds per transaction
+
+```sql
+refunds: id, transaction_id (FK → transactions, cascade delete), amount, currency, created_at, updated_at
 ```
 
 ## Payment Command
@@ -85,12 +93,12 @@ php payment-cli payment CREATE P101 100 MYR merchant1
 | `AUTHORIZE` / `AUTH` | `<payment_id>` | Transitions to `AUTHORIZED` or `PRE_SETTLEMENT_REVIEW` |
 | `CAPTURE` | `<payment_id>` | Transitions to `CAPTURED` |
 | `VOID` | `<payment_id> [reason]` | Transitions to `VOIDED`; optional reason string stored on the row |
-| `REFUND` | `<payment_id> [amount]` | Transitions to `REFUNDED`; optional partial amount, defaults to full |
+| `REFUND` | `<payment_id> [amount]` | Transitions to `PARTIALLY_REFUNDED` (partial) or `REFUNDED` (full); multiple partial refunds allowed |
 | `SETTLE` | `<payment_id>` | Transitions to `SETTLED`; increments account balance; idempotent |
 | `SETTLEMENT` | `<batch_id>` | Assigns `batch_id` to all untagged `SETTLED` rows, then reports count and MYR total |
 | `STATUS` | `<payment_id>` | Prints `payment_id status amount currency merchant_id` for one transaction |
 | `LIST` | _(none)_ | Prints `payment_id status amount currency` for every transaction |
-| `AUDIT` | `<payment_id>` | Accepted but currently a no-op stub |
+| `AUDIT` | `<payment_id>` | Prints chronological event history (INITIATED, AUTHORIZED, CAPTURED, SETTLED, VOIDED, FAILED, each REFUND with running total); no state change |
 | `HELP` | _(none)_ | Displays command reference |
 | `EXIT` / `QUIT` | _(none)_ | Exits the shell |
 
@@ -111,7 +119,7 @@ php payment-cli account INFO
 
 | Command | Effect |
 |---------|--------|
-| `INFO` | Prints account ID, MYR balance, creation timestamp, and all transactions (payment_id, status, amount, currency, merchant_id; plus refund_amount and void_reason when present) |
+| `INFO` | Prints account ID, MYR balance, creation timestamp, and all transactions (payment_id, status, amount, currency, merchant_id; void_reason when present; plus individual refund rows with decimal amount and timestamp) |
 | `RESET` | Deletes all transaction rows and zeros the account balance — **destructive, no confirmation prompt** |
 | `HELP` | Lists available commands |
 | `EXIT` / `QUIT` | Exits the shell |
@@ -123,9 +131,9 @@ php payment-cli account INFO
 
 - **One account per app instance** — the account is a balance holder, not a merchant identity
 - **Shell startup** → check if any account exists → if not, `INSERT` with `balance = 0.00`
-- **Balance updates**: `+amount` on `SETTLE`, `-refund_amount` on `REFUND`, no change on `VOID`/`FAILED`
+- **Balance updates**: `+amount` on `SETTLE`, `-refund amount` (MYR-converted) on each `REFUND`, no change on `VOID`/`FAILED`
 - **`merchant_id` on transactions** — used for filtering/reporting, not for account lookup
-- **Integer amounts** — `amount`, `refund_amount`, and `balance` are stored as `BIGINT UNSIGNED` in minor units (e.g. `1000` = MYR 10.00). Decimal conversion is handled at the application layer based on currency exponent
+- **Integer amounts** — `amount` and `balance` are stored as `BIGINT UNSIGNED` minor units (e.g. `1000` = MYR 10.00); each `refunds.amount` is also stored as minor units in the original currency. Decimal conversion is handled at the application layer based on currency exponent
 - **`TransactionStatus` enum** — all valid statuses live in `app/Enums/TransactionStatus.php` as a backed string enum. Migration derives values via `array_column(TransactionStatus::cases(), 'value')` — never hardcode status strings elsewhere
 - **Model cast** — `Transaction::$casts` maps `status` to `TransactionStatus::class`, so `$transaction->status` is always an enum instance
 
@@ -142,7 +150,7 @@ php payment-cli account INFO
 | `CAPTURE` | `AUTHORIZED` \| `PRE_SETTLEMENT_REVIEW` | `CAPTURED` | None |
 | `SETTLE` | `CAPTURED` | `SETTLED` | `+amount` (MYR) |
 | `VOID` | `INITIATED` \| `AUTHORIZED` | `VOIDED` | None |
-| `REFUND` | `CAPTURED` | `REFUNDED` | `-refund_amount` (MYR) |
+| `REFUND` | `CAPTURED` \| `PARTIALLY_REFUNDED` | `PARTIALLY_REFUNDED` \| `REFUNDED` | `-refund amount` (MYR, per call) |
 | `SETTLEMENT` | _(read-only report)_ | — | None |
 
 ## Descriptions
@@ -152,7 +160,7 @@ php payment-cli account INFO
 - **CAPTURE** — commits the reserved funds for collection. Balance still unchanged until `SETTLE`.
 - **SETTLE** — finalises collection; increments account balance by the amount converted to MYR. Idempotent if already `SETTLED`.
 - **VOID** — cancels before capture. No balance change. Optional `reason` string.
-- **REFUND** — returns money after capture. Decrements account balance by the refund amount (MYR). Optional partial amount; defaults to full amount.
+- **REFUND** — returns money after capture. Decrements account balance by each refund amount converted to MYR. Optional partial amount; defaults to full remaining amount. Sets status to `PARTIALLY_REFUNDED` when amount < transaction total, allowing further refunds; sets to `REFUNDED` when fully recovered.
 - **SETTLEMENT** — batch report. Accepts a `batch_id` label, tags all untagged `SETTLED` rows with it, then returns count + total MYR of all `SETTLED` transactions. Does not change any transaction status.
 
 ## Statuses
@@ -165,7 +173,8 @@ php payment-cli account INFO
 | `CAPTURED` | Funds committed for collection, pending settlement |
 | `SETTLED` | Funds collected, account balance updated |
 | `VOIDED` | Cancelled before capture, no money moved |
-| `REFUNDED` | Money returned after capture, balance decremented |
+| `PARTIALLY_REFUNDED` | One or more partial refunds applied; further `REFUND` calls accepted until fully refunded |
+| `REFUNDED` | Fully refunded after capture, balance decremented |
 | `FAILED` | Set automatically by `CREATE` when a duplicate `payment_id` is submitted with mismatched `amount`, `currency`, or `merchant_id` |
 
 ## Happy Path
@@ -177,8 +186,9 @@ CREATE → AUTHORIZE → CAPTURE → SETTLE
 ## Cancellation Paths
 
 ```
-CREATE → AUTHORIZE → VOID          (before capture)
-CREATE → AUTHORIZE → CAPTURE → REFUND   (after capture)
+CREATE → AUTHORIZE → VOID                                                    (before capture)
+CREATE → AUTHORIZE → CAPTURE → REFUND                                       (full refund)
+CREATE → AUTHORIZE → CAPTURE → REFUND (partial) → PARTIALLY_REFUNDED → REFUND → REFUNDED
 ```
 
 ---

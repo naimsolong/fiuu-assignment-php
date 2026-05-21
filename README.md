@@ -179,12 +179,19 @@ The application follows a three-layer separation:
 
 The state machine is enforced at the service layer using explicit `match`/`in_array` guards rather than a formal state machine library, which keeps it readable and easy to extend with a new state or transition.
 
+**Payment lifecycle states:** `INITIATED → AUTHORIZED → CAPTURED → SETTLED`; with `PRE_SETTLEMENT_REVIEW` as an optional intermediate after `AUTHORIZED`; and `VOIDED`, `PARTIALLY_REFUNDED`, `REFUNDED`, and `FAILED` as terminal or intermediate states on alternative paths.
+
+**Partial refunds:** `REFUND` accepts an optional `[amount]`. If the amount is less than the transaction total, the status becomes `PARTIALLY_REFUNDED` and further `REFUND` calls are accepted until the full amount is recovered, at which point the status transitions to `REFUNDED`. Each refund is stored as a separate row in the `refunds` table.
+
+**AUDIT:** Returns a chronological event history for the payment — `INITIATED`, `AUTHORIZED` (or `PRE_SETTLEMENT_REVIEW`), `CAPTURED`, `SETTLED`, `VOIDED`, `FAILED`, and each `REFUND` with running total. No state is modified.
+
 ### Data Storage
 
 SQLite via Laravel Eloquent. Two tables:
 
 - `accounts` — one row per application instance; holds the running `balance` in MYR minor units.
 - `transactions` — one row per payment; stores `amount` in the original currency's minor units alongside the ISO `currency` code.
+- `refunds` — child records keyed to a `transaction_id`; each partial or full refund is a separate row with its own `amount` and `currency`. Supports multiple partial refunds per transaction.
 
 Amounts are stored as `BIGINT UNSIGNED` minor units throughout (e.g. MYR 10.00 → `1000`). Decimal conversion is handled at the application layer using `brick/money` based on each currency's exponent.
 
